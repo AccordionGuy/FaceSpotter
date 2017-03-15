@@ -16,7 +16,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -32,18 +32,18 @@ import com.raywenderlich.facespotter.ui.camera.GraphicOverlay;
 
 import java.io.IOException;
 
+
 public final class FaceActivity extends AppCompatActivity {
-  private static final String TAG = "GooglyEyes";
+
+  private static final String TAG = "FaceActivity";
 
   private static final int RC_HANDLE_GMS = 9001;
-
   // permission request codes need to be < 256
   private static final int RC_HANDLE_CAMERA_PERM = 255;
 
   private CameraSource mCameraSource = null;
   private CameraSourcePreview mPreview;
   private GraphicOverlay mGraphicOverlay;
-
   private boolean mIsFrontFacing = true;
 
 
@@ -58,7 +58,7 @@ public final class FaceActivity extends AppCompatActivity {
     mPreview = (CameraSourcePreview) findViewById(R.id.preview);
     mGraphicOverlay = (GraphicOverlay) findViewById(R.id.faceOverlay);
 
-    final Button button = (Button) findViewById(R.id.flipButton);
+    final ImageButton button = (ImageButton) findViewById(R.id.flipButton);
     button.setOnClickListener(mFlipButtonListener);
 
     if (savedInstanceState != null) {
@@ -271,4 +271,5 @@ public final class FaceActivity extends AppCompatActivity {
       }
     }
   }
+
 }

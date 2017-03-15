@@ -12,23 +12,30 @@ import com.raywenderlich.facespotter.ui.camera.GraphicOverlay;
 import java.util.HashMap;
 import java.util.Map;
 
+// See https://developers.google.com/android/reference/com/google/android/gms/vision/Tracker
 
 class FaceTracker extends Tracker<Face> {
+
+  private static final String TAG = "FaceTracker";
+
+  // "Threshold" constants
   private static final float EYE_CLOSED_THRESHOLD = 0.4f;
+  private static final float SMILING_THRESHOLD = 0.8f;
 
   private GraphicOverlay mOverlay;
   private FaceGraphic mFaceGraphic;
   private Context mContext;
   private boolean mIsFrontFacing;
+  private FaceData mFaceData;
 
-  // As subjects move, part or all of their faces may momentarily move
-  // too quickly to detect features or out of the tracker's detection range.
-  // We keep a record of previously detected facial landmarks so that
-  // we can approximate their locations during these momentary "disappearances".
-  private Map<Integer, PointF> mPreviousProportions = new HashMap<>();
+  // Subjects may move too quickly to for the system to detect their detect features,
+  // or they may move so their features are out of the tracker's detection range.
+  // This map keeps track of previously detected facial landmarks so that we can approximate
+  // their locations when they momentarily "disappear".
+  private Map<Integer, PointF> mPreviousLandmarkPositions = new HashMap<>();
 
-  // Similarly, keep track of the previous eye open state so that it can be reused for
-  // intermediate frames which lack eye landmarks and corresponding eye state.
+  // As with facial landmarks, we keep track of the eye’s previous open/closed states
+  // so that we can use them during those moments when they momentarily go undetected.
   private boolean mPreviousIsLeftOpen = true;
   private boolean mPreviousIsRightOpen = true;
 
@@ -37,82 +44,86 @@ class FaceTracker extends Tracker<Face> {
     mOverlay = overlay;
     mContext = context;
     mIsFrontFacing = isFrontFacing;
+    mFaceData = new FaceData();
   }
 
-  // Create a new graphic when a new face is detected.
+  // Face detection event handlers
+  // =============================
+
+  // This method is called when a new face is detected.
+  // We'll create a new graphic overlay whenever this happens.
   @Override
   public void onNewItem(int id, Face face) {
     mFaceGraphic = new FaceGraphic(mOverlay, mContext, mIsFrontFacing);
   }
 
-  // Update the eyes, nose, and mustache based on the most recent face detection results.
+  // As detected faces are tracked over time, this method is called regularly to update their information.
+  // We'll collect the updated face information and use it to update the graphic overlay.
   @Override
   public void onUpdate(FaceDetector.Detections<Face> detectionResults, Face face) {
     mOverlay.add(mFaceGraphic);
-    updatePreviousProportions(face);
+    updatePreviousLandmarkPositions(face);
 
-    PointF leftEyePosition = getLandmarkPosition(face, Landmark.LEFT_EYE);
-    PointF rightEyePosition = getLandmarkPosition(face, Landmark.RIGHT_EYE);
-    PointF noseBasePosition = getLandmarkPosition(face, Landmark.NOSE_BASE);
-    PointF mouthLeftPosition =  getLandmarkPosition(face, Landmark.LEFT_MOUTH);
-    PointF mouthRightPosition = getLandmarkPosition(face, Landmark.RIGHT_MOUTH);
-    PointF bottomMouthPosition = getLandmarkPosition(face, Landmark.BOTTOM_MOUTH);
+    // Get face dimensions.
+    mFaceData.setPosition(face.getPosition());
+    mFaceData.setWidth(face.getWidth());
+    mFaceData.setHeight(face.getHeight());
 
+    // Get head angles.
+    mFaceData.setEulerY(face.getEulerY());
+    mFaceData.setEulerZ(face.getEulerZ());
+
+    // Get the positions of facial landmarks.
+    mFaceData.setLeftEyePosition(getLandmarkPosition(face, Landmark.LEFT_EYE));
+    mFaceData.setRightEyePosition(getLandmarkPosition(face, Landmark.RIGHT_EYE));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.LEFT_CHEEK));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.RIGHT_CHEEK));
+    mFaceData.setNoseBasePosition(getLandmarkPosition(face, Landmark.NOSE_BASE));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.LEFT_EAR));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.LEFT_EAR_TIP));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.RIGHT_EAR));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.RIGHT_EAR_TIP));
+    mFaceData.setMouthLeftPosition(getLandmarkPosition(face, Landmark.LEFT_MOUTH));
+    mFaceData.setMouthBottomPosition(getLandmarkPosition(face, Landmark.BOTTOM_MOUTH));
+    mFaceData.setMouthRightPosition(getLandmarkPosition(face, Landmark.RIGHT_MOUTH));
+
+    // Determine if eyes are open.
     float leftOpenScore = face.getIsLeftEyeOpenProbability();
-    boolean isLeftOpen;
     if (leftOpenScore == Face.UNCOMPUTED_PROBABILITY) {
-      isLeftOpen = mPreviousIsLeftOpen;
+      mFaceData.setLeftEyeOpen(mPreviousIsLeftOpen);
     } else {
-      isLeftOpen = (leftOpenScore > EYE_CLOSED_THRESHOLD);
-      mPreviousIsLeftOpen = isLeftOpen;
+      mFaceData.setLeftEyeOpen(leftOpenScore > EYE_CLOSED_THRESHOLD);
+      mPreviousIsLeftOpen = mFaceData.isLeftEyeOpen();
     }
-
     float rightOpenScore = face.getIsRightEyeOpenProbability();
-    boolean isRightOpen;
     if (rightOpenScore == Face.UNCOMPUTED_PROBABILITY) {
-      isRightOpen = mPreviousIsRightOpen;
+      mFaceData.setRightEyeOpen(mPreviousIsRightOpen);
     } else {
-      isRightOpen = (rightOpenScore > EYE_CLOSED_THRESHOLD);
-      mPreviousIsRightOpen = isRightOpen;
+      mFaceData.setRightEyeOpen(rightOpenScore > EYE_CLOSED_THRESHOLD);
+      mPreviousIsRightOpen = mFaceData.isRightEyeOpen();
     }
 
-    float smileRating = face.getIsSmilingProbability();
+    // Determine if person is smiling.
+    mFaceData.setSmiling(face.getIsSmilingProbability() > SMILING_THRESHOLD);
 
-    mFaceGraphic.update(
-      leftEyePosition,
-      isLeftOpen,
-      rightEyePosition,
-      isRightOpen,
-      noseBasePosition,
-      mouthLeftPosition,
-      bottomMouthPosition,
-      mouthRightPosition,
-      smileRating);
+    // Update the graphic overlay.
+    mFaceGraphic.update(mFaceData);
   }
 
-  // This method is called when a subject's face momentarily
-  // goes undetected.
+  // This method is called when a face momentarily goes undetected.
   @Override
   public void onMissing(FaceDetector.Detections<Face> detectionResults) {
     mOverlay.remove(mFaceGraphic);
   }
 
-  // This method is called when a subject's face is assumed
-  // to be out of camera view for good.
+  // This method is called when a face is assumed to be out of camera view for good.
   @Override
   public void onDone() {
     mOverlay.remove(mFaceGraphic);
   }
 
-
-  private void updatePreviousProportions(Face face) {
-    for (Landmark landmark : face.getLandmarks()) {
-      PointF position = landmark.getPosition();
-      float xProp = (position.x - face.getPosition().x) / face.getWidth();
-      float yProp = (position.y - face.getPosition().y) / face.getHeight();
-      mPreviousProportions.put(landmark.getType(), new PointF(xProp, yProp));
-    }
-  }
+  // Facial landmark utility methods
+  // ===============================
 
   // Given a face and a facial landmark position,
   // return the coordinates of the landmark if known,
@@ -124,13 +135,23 @@ class FaceTracker extends Tracker<Face> {
       }
     }
 
-    PointF prop = mPreviousProportions.get(landmarkId);
-    if (prop == null) {
+    PointF landmarkPosition = mPreviousLandmarkPositions.get(landmarkId);
+    if (landmarkPosition == null) {
       return null;
     }
 
-    float x = face.getPosition().x + (prop.x * face.getWidth());
-    float y = face.getPosition().y + (prop.y * face.getHeight());
+    float x = face.getPosition().x + (landmarkPosition.x * face.getWidth());
+    float y = face.getPosition().y + (landmarkPosition.y * face.getHeight());
     return new PointF(x, y);
   }
+
+  private void updatePreviousLandmarkPositions(Face face) {
+    for (Landmark landmark : face.getLandmarks()) {
+      PointF position = landmark.getPosition();
+      float xProp = (position.x - face.getPosition().x) / face.getWidth();
+      float yProp = (position.y - face.getPosition().y) / face.getHeight();
+      mPreviousLandmarkPositions.put(landmark.getType(), new PointF(xProp, yProp));
+    }
+  }
+
 }

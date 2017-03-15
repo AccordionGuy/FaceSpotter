@@ -25,6 +25,9 @@ import android.os.SystemClock;
  * of the device in which it is run and how frequently updates are received.
  */
 class EyePhysics {
+
+  private static final String TAG = "EyePhysics";
+
   // The friction and gravity values below are set relative to a specific time period.  This
   // allows the simulation to run at the same rate, regardless of whether it is running on a slow
   // or fast device or if there are temporary performance variations on the device.
